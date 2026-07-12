@@ -35,8 +35,8 @@ read_when:
 #### 0.1 获取项目类节点列表
 
 ```bash
-lark-cli wiki nodes list \\
-  --params '{"space_id":"7490053072341843987","parent_node_token":"XKQDwn4HaiTo9NkJz5RcYWMsnRg","page_size":50}' \\
+lark-cli wiki nodes list \
+  --params '{"space_id":"7490053072341843987","parent_node_token":"XKQDwn4HaiTo9NkJz5RcYWMsnRg","page_size":50}' \
   --as user --format json
 ```
 
@@ -57,16 +57,16 @@ lark-cli wiki nodes list \\
 #### 0.2 获取"智能纪要"节点 token（兜底节点）
 
 ```bash
-lark-cli wiki nodes list \\
-  --params '{"space_id":"7490053072341843987","page_size":50}' \\
+lark-cli wiki nodes list \
+  --params '{"space_id":"7490053072341843987","page_size":50}' \
   --as user --format json
 ```
 
 从返回中找到 `title == "智能纪要"` 的节点，提取 `node_token`（当前值为 `Nf9AwNeU8iKWIRk0rEbcNXPvn7b`）。不存在则创建：
 
 ```bash
-lark-cli wiki +node-create \\
-  --params '{"space_id":"7490053072341843987","parent_node_token":"","title":"智能纪要","obj_type":"docx"}' \\
+lark-cli wiki +node-create \
+  --params '{"space_id":"7490053072341843987","parent_node_token":"","title":"智能纪要","obj_type":"docx"}' \
   --as user --format json
 ```
 
@@ -111,7 +111,7 @@ lark-cli minutes +search --start <YYYY-MM-DD> --end <YYYY-MM-DD> --as user --for
 **分页处理**：当 `has_more == true` 时，传入上一页的 `page_token` 翻页：
 
 ```bash
-lark-cli minutes +search --start <start> --end <end> --as user --format json \\
+lark-cli minutes +search --start <start> --end <end> --as user --format json \
   --params '{"page_token":"<上页page_token>"}'
 ```
 
@@ -177,98 +177,126 @@ lark-cli vc +notes --minute-tokens <minute_token> --as user --format json
 - 保留原话措辞风格和语气，关键判断用引号标注
 - 分主题段落用 3-5 句展开
 - 所有数字、金额、比例原样保留
-- 每个主题下 2-4 个子要点用 `<bold>` 标注关键词
+- 每个主题下 2-4 个子要点用 `<b>` 标注关键词
 
 #### 2.4 构建文档 XML 并创建
 
-使用 `lark-cli docs +create --api-version v2`。
+使用 `lark-cli docs +create` 命令，`--api-version v2` 是默认值无需传入。
+
+**注意：DocxXML 标签使用标准 HTML 标签名**，详细规则参考 `lark-cli skills read lark-doc references/lark-doc-xml.md`。
 
 **文档结构顺序（固定）**：
 
 ```
-标题 → blockquote(时间) → blockquote(参会人) → p空行 → h1一、核心概述 → <whiteboard type="blank"/> → p概述 → p空行 → h1二、会议要点 → h2主题1 → ul子要点 → h2主题2 → ... → p空行 → h1三、待办事项 → checkbox列表
+<title> → blockquote(时间) → blockquote(参会人) → p空行 → h1(核心概述) → <whiteboard type="blank"/> → p概述 → p空行 → h1(会议要点) → h2主题1 → ul+li子要点 → h2主题2 → ... → p空行 → h1(待办事项) → checkbox列表
 ```
+
+**✱ 关键标签对照表**：
+
+| 你想用的标签 | 正确写法 | 说明 |
+|:------------|:---------|:-----|
+| `<heading1>` | `<h1>` | 一级标题用 HTML h1 |
+| `<heading2>` | `<h2>` | 二级标题用 HTML h2 |
+| `<bold>` | `<b>` | 加粗用 HTML b |
+| `<document><head><body>` | **不要** | 直接写内容，无需包裹 |
+| `<?xml ...>` | **不要** | 不写 XML 声明 |
+| `<checkbox status="unchecked">` | `<checkbox done="false">` | 用 `done` 属性 |
+| `--title "xxx"` | `<title>xxx</title>` | 标题放在内容中 |
+| `<grid column_size="50|50">` | `<grid><column width-ratio="0.5">` | grid 分栏格式 |
 
 **XML 模板**：
 
 ```xml
-<document>
-  <head>
-    <title>智能纪要：{主题} {YYYY年M月D日}</title>
-  </head>
-  <body>
-    <blockquote>时间：{YYYY年M月D日 HH:mm}</blockquote>
-    <blockquote>参会人：{张三、李四、王五……}</blockquote>
-    <p></p>
-    <heading1>一、核心概述</heading1>
-    <whiteboard type="blank"></whiteboard>
-    <p>{3-5 句自然段落概述，包含会议背景、核心议题、总体结论}</p>
-    <p></p>
-    <heading1>二、会议要点</heading1>
-    <heading2>1. {议题名称}</heading2>
-    <p>{自然段落：背景→观点/分歧→结论，3-5 句}</p>
-    <ul>
-      <li><bold>{子要点1}</bold>：{详细说明}</li>
-      <li><bold>{子要点2}</bold>：{详细说明}</li>
-    </ul>
-    <heading2>2. {议题名称}</heading2>
-    <!-- 对比类议题嵌入 grid -->
-    <grid column_size="50|50">
-      <cell row="0" column="0"><p>{左栏文字要点}</p></cell>
-      <cell row="0" column="1">
-        <table>
-          <tr><td>维度</td><td>方案A</td><td>方案B</td></tr>
-          <tr><td>成本</td><td>{值}</td><td>{值}</td></tr>
-          <tr><td>周期</td><td>{值}</td><td>{值}</td></tr>
-        </table>
-      </cell>
-    </grid>
-    <p></p>
-    <heading1>三、待办事项</heading1>
-    <checkbox status="unchecked">责任人：张三 — {具体行动项}，截止：{日期}</checkbox>
-    <checkbox status="unchecked">责任人：李四 — {具体行动项}，截止：{日期}</checkbox>
-  </body>
-</document>
+<title>智能纪要：{主题} {YYYY年M月D日}</title>
+
+<blockquote>时间：{YYYY年M月D日 HH:mm}</blockquote>
+<blockquote>参会人：{张三、李四、王五……}</blockquote>
+
+<h1>一、核心概述</h1>
+<whiteboard type="blank"></whiteboard>
+
+<p>{3-5 句自然段落概述，包含会议背景、核心议题、总体结论}</p>
+
+<h1>二、会议要点</h1>
+
+<h2>1. {议题名称}</h2>
+<p>{自然段落：背景→观点/分歧→结论，3-5 句}</p>
+<ul>
+  <li><b>{子要点1}</b>：{详细说明}</li>
+  <li><b>{子要点2}</b>：{详细说明}</li>
+</ul>
+
+<h2>2. {议题名称}</h2>
+<!-- 对比类议题嵌入 grid 双栏布局 -->
+<grid>
+  <column width-ratio="0.5">
+    <p>{左栏文字要点}</p>
+  </column>
+  <column width-ratio="0.5">
+    <table>
+      <colgroup><col span="2" width="120"/></colgroup>
+      <thead><tr><th>维度</th><th>方案A</th><th>方案B</th></tr></thead>
+      <tbody>
+        <tr><td>成本</td><td>{值}</td><td>{值}</td></tr>
+        <tr><td>周期</td><td>{值}</td><td>{值}</td></tr>
+      </tbody>
+    </table>
+  </column>
+</grid>
+
+<h1>三、待办事项</h1>
+<checkbox done="false">责任人：张三 — {具体行动项}，截止：{日期}</checkbox>
+<checkbox done="false">责任人：李四 — {具体行动项}，截止：{日期}</checkbox>
 ```
 
 **创建命令**：
 
 ```bash
-xml_content="..." && lark-cli docs +create --api-version v2 --content "$xml_content" --as user --format json
+xml_content="..." && lark-cli docs +create --content "$xml_content" --as user --format json
 ```
 
 **提取画板 token**：从返回的 `data.document.new_blocks` 中找 `block_type == "whiteboard"`，取 `block_token`。无需额外 fetch。
 
 #### 2.5 绘制开篇画板
 
-飞书画板 DSL v2 格式，五区布局。
+飞书画板 DSL v2 格式，五区布局（仅用文本节点实现）。
 
-**标准结构**：
+**✱ DSL v2 关键约束**（实测验证）：
+- `"version"` 必须是数字 `2`，不是字符串 `"2.0"`
+- 节点类型**只支持** `"type": "text"`，不支持 `rectangle` / `shape` / `group` 类型
+- 画板用文本节点通过大小、颜色、加粗和 emoji 实现视觉分层
+- 无法绘制背景矩形/卡片边框，靠文本定位和 emoji 分隔符实现视觉区域划分
+- 用 Python `json.dumps(ensure_ascii=False)` 生成 DSL JSON
+
+**标准结构（文本节点实现）**：
 
 ```
-+------------------------------------------------------+
-|  大标题（议题名，fontSize:28，粗体居中）              |
-+------------------------------------------------------+
-|  核心结论区（#FFFBE6 黄色背景，2-3条判断句）          |
-+------------------------------------------------------+
-|  三栏卡片：[蓝 #EAF1FB] [紫 #EAE2FE] [黄绿 #F0F9E8] |
-|  每张 = 彩色标题栏(icon+标题) + 白底要点列表          |
-+------------------------------------------------------+
-|  底部对比表（有方案对比时必加，表头 #1F2329 深色）    |
-+------------------------------------------------------+
+┌─ 大标题（fontSize:28, 居中, 粗体）───────────────────
+│  💡 核心结论（fontSize:16, 黄色）
+│  • 结论1（fontSize:13, 粗体）
+│  • 结论2
+│  • 结论3
+├─ ═══ 当前方案问题 ═══（#5178C6 蓝色分隔标题）
+│  3-4条文字要点（fontSize:12, 左对齐）
+├─ ═══ 改进方案 ═══（#8569CB 紫色分隔标题）
+│  3-4条文字要点（fontSize:12, 左对齐，用✅标记）
+├─ ═══ 系统与转型 ═══（#509863 绿色分隔标题）
+│  3-4条文字要点
+├─ ═══════ 前后方案对比 ═══════（粗体居中分隔线）
+│  对比维度 | 现行方案（红色）| 改进方案（绿色）
+│  5行对比数据（文本对齐排列）
 ```
 
 **内容原则**：
 - 核心结论区必须写**判断句**（不是"讨论了XX"，而是"确定采用XX方案"）
-- 卡片标题栏配 icon（从 `npx -y @larksuite/whiteboard-cli@^0.2.11 --icons` 选取）
 - 保留所有关键数字，不模糊化
-- 用 Python `json.dumps(ensure_ascii=False)` 生成 DSL JSON
+- 分隔标题用 `══════` 符号 + 颜色区分不同区域
 
 **写入画板命令**：
 
 ```bash
-npx -y @larksuite/whiteboard-cli@^0.2.11 -i diagram.json --to openapi --format json \\
-  | lark-cli whiteboard +update --whiteboard-token <board_token> \\
+npx -y @larksuite/whiteboard-cli@^0.2.11 -i diagram.json --to openapi --format json \
+  | lark-cli whiteboard +update --whiteboard-token <board_token> \
       --source - --input_format raw --idempotent-token <MMDD_主题缩写_序号> --overwrite --as user
 ```
 
@@ -283,7 +311,7 @@ npx -y @larksuite/whiteboard-cli@^0.2.11 -i diagram.json --to openapi --format j
 注意：`--parent-token` 参数使用 `target_project_token`（可能是项目节点或智能纪要节点）。
 
 ```bash
-lark-cli docs +create --api-version v2 --content "<XML_CONTENT>" \\
+lark-cli docs +create --content "<XML_CONTENT>" \
   --parent-token <target_project_token> --as user --format json
 ```
 
@@ -353,8 +381,8 @@ Step 0 → 构建项目节点映射表 → 完成
 - [ ] 标题：`智能纪要：{主题} {YYYY年M月D日}`
 - [ ] 内容还原度高：段落是自然语言叙述（背景→讨论→结论），非简单要点
 - [ ] 所有原始数字/金额/公司名/人名已保留
-- [ ] 含 blockquote(时间) + blockquote(参会人) + whiteboard 占位
-- [ ] 画板：大标题 + 黄色结论区（判断句） + 三栏彩色卡片（含 icon） + 底部对比表（可选）
+- [ ] XML 标签使用正确：`h1`/`h2`/`b`（非 heading1/heading2/bold），`checkbox done="false"`
+- [ ] 画板 DSL v2 只用 `type: "text"` 节点，`version` 为数字 2
 - [ ] 待办有明确责任人 + 行动项 + 截止日期
 - [ ] 文档创建在对应项目节点下（或智能纪要节点下）
 - [ ] 画板已写入新文档
